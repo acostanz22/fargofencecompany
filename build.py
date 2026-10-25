@@ -30,7 +30,7 @@ def call_btn(cls="btn btn-ghost"):
     return f'<a class="{cls}" href="tel:{TEL}">{PHONE_SVG}{PHONE}</a>'
 
 
-OFFICE_HOURS = "Free on-site estimates. Call or send the form any time."
+OFFICE_HOURS = "Monday–Sunday: 7 am – 7 pm"
 PHONE_ICON = (
     '<svg class="phone-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
     '<path fill="currentColor" d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3 1.2.4 2.5.6 3.8.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.6.6 3.8.1.4 0 .8-.3 1.1L6.6 10.8z"/>'
@@ -249,6 +249,15 @@ def header(current):
 '''
 
 
+OFFICE_HOURS_DAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+OFFICE_HOURS_TIME = "7 am – 7 pm"
+
+
+def office_hours_block():
+    rows = "".join(f"<div><span>{day}</span><span>{OFFICE_HOURS_TIME}</span></div>" for day in OFFICE_HOURS_DAYS)
+    return f'<div class="hours-list">{rows}</div>'
+
+
 def footer(current):
     service_li = "".join(f'<li><a href="{s["slug"]}">{s["nav"]}</a></li>' for s in SERVICES)
     qhref = quote_href(current)
@@ -279,6 +288,10 @@ def footer(current):
         <li><a href="privacy.html">Privacy</a></li>
         <li><a href="sitemap.xml">Sitemap</a></li>
       </ul>
+    </div>
+    <div>
+      <h2>Office Hours</h2>
+      {office_hours_block()}
     </div>
   </div>
   <div class="container footer-base">
