@@ -30,6 +30,19 @@ def call_btn(cls="btn btn-ghost"):
     return f'<a class="{cls}" href="tel:{TEL}">{PHONE_SVG}{PHONE}</a>'
 
 
+OFFICE_HOURS = "Free on-site estimates. Call or send the form any time."
+PHONE_ICON = (
+    '<svg class="phone-icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+    '<path fill="currentColor" d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1.1-.3 1.2.4 2.5.6 3.8.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.6.6 3.8.1.4 0 .8-.3 1.1L6.6 10.8z"/>'
+    "</svg>"
+)
+
+
+def phone_link(extra_class=""):
+    cls = "phone-link" + (f" {extra_class}" if extra_class else "")
+    return f'<a class="{cls}" href="tel:{TEL}">{PHONE_ICON}<strong>{PHONE}</strong></a>'
+
+
 def quote_href(current):
     return "#quote" if current == "index.html" else "contact.html#quote"
 
@@ -311,8 +324,36 @@ def tally_card():
     </div>'''
 
 
+def service_gallery(s):
+    """Primary service image plus one other service image."""
+    order = [slug for slug, _ in s["related"]] + [o["slug"] for o in SERVICES]
+    by_slug = {o["slug"]: o for o in SERVICES}
+    shots = [s]
+    for slug in order:
+        o = by_slug.get(slug)
+        if o and o["slug"] != s["slug"] and o["image"] != s["image"]:
+            shots.append(o)
+            break
+    figs = "".join(
+        f'<figure class="service-shot"><img src="{o["image"]}" alt="{o["alt"]}" width="960" height="640" loading="lazy" decoding="async"></figure>'
+        for o in shots
+    )
+    return f'<div class="service-gallery">{figs}</div>'
+
+
+def service_related(s):
+    links = list(s["related"])
+    seen = {slug for slug, _ in links} | {s["slug"]}
+    for o in SERVICES:
+        if len(links) >= 4:
+            break
+        if o["slug"] not in seen:
+            links.append((o["slug"], o["nav"]))
+            seen.add(o["slug"])
+    return "".join(f'<li><a href="{slug}">{label}</a></li>' for slug, label in links[:4])
+
+
 def service_page(s):
-    related = " · ".join(f'<a href="{slug}">{label}</a>' for slug, label in s["related"])
     schema = graph(
         {
             "@type": "WebPage",
@@ -346,51 +387,61 @@ def service_page(s):
         },
         faq_node(f"{SITE}/{s['slug']}#faq", s["faqs"]),
     )
+    towns = "".join(f'<li><a href="{loc["slug"]}">{loc["nav"]}</a></li>' for loc in LOCATIONS)
     body = f'''<main id="main">
-<section class="page-hero">
+<div class="crumb-bar"><div class="container">{crumbs([("services.html", "Services"), (s["slug"], s["nav"])])}</div></div>
+<section class="page-hero service-hero">
   <div class="container">
-    {crumbs([("services.html", "Services"), (s["slug"], s["nav"])])}
-    <h1>{s["h1"]}</h1>
-    <p class="lede">{s["lede"]}</p>
-    <div class="hero-actions">
-      {call_btn("btn btn-primary btn-lg")}
-      <a class="btn btn-ghost btn-lg" href="contact.html#quote">Get a free quote</a>
+    <div class="service-hero-inner">
+      <p class="eyebrow">{s["nav"]}</p>
+      <h1>{s["h1"]}</h1>
+      <p class="lede">{s["lede"]}</p>
+      <div class="hero-actions">
+        {call_btn("btn btn-primary btn-lg")}
+        <a class="btn btn-ghost btn-lg" href="contact.html#quote">Get a free quote</a>
+      </div>
     </div>
   </div>
 </section>
-<section class="section">
-  <div class="container split">
-    <div class="split-media"><img src="{s["image"]}" alt="{s["alt"]}" width="960" height="640"></div>
-    <div class="prose">
-      <h2>When this fence is the right job</h2>
-      <p>{s["when"]}</p>
+<section class="section service-body">
+  <div class="container service-layout">
+    <div class="service-main">
+      {service_gallery(s)}
+      <div class="prose service-copy">
+        <h2>When this fence is the right job</h2>
+        <p>{s["when"]}</p>
+        <h2>How the work goes</h2>
+        {steps_html(s["steps"])}
+        <p>{s["after"]}</p>
+        <h2>What changes the estimate</h2>
+        <p>We price the line on the lot. These are the pieces that move the number. We do not publish a per-foot menu.</p>
+        {factors_html(s["factors"])}
+        <h2>Questions about {s["faq_label"]}</h2>
+        {faq_html(s["faqs"])}
+      </div>
     </div>
+    <aside class="service-aside" aria-label="Estimate and related services">
+      <div class="side-card">
+        <p class="side-kicker">Talk through the line</p>
+        <p>Call or send the town, the fence type, and a rough length. We will tell you if the job is a repair, a replacement, or a different material than you started with.</p>
+        <p class="side-phone">{phone_link("phone-link-lg")}</p>
+        <p class="side-hours">{OFFICE_HOURS}</p>
+        <p><a class="btn btn-primary" href="contact.html#quote">Get a free quote</a></p>
+      </div>
+      <div class="side-card side-card-muted">
+        <p class="side-kicker">Related</p>
+        <ul class="side-links">{service_related(s)}</ul>
+      </div>
+    </aside>
   </div>
 </section>
-<section class="section soft">
-  <div class="container prose">
-    <h2>How the work goes</h2>
-    {steps_html(s["steps"])}
-    <div style="margin-top:1.2rem"><p>{s["after"]}</p></div>
-  </div>
-</section>
-<section class="section">
+<section class="section section-towns">
   <div class="container">
-    <div class="section-head">
-      <h2>What changes the estimate</h2>
-      <p>We price the line on the lot. These are the pieces that move the number. We do not publish a per-foot menu.</p>
-    </div>
-    {factors_html(s["factors"])}
+    <h2>Towns we serve</h2>
+    <ul class="chips light-chips">{towns}</ul>
+    <p class="towns-links"><a href="service-areas.html">Service areas</a> · <a href="contact.html#quote">Request an estimate</a> · <a href="services.html">All services</a></p>
   </div>
 </section>
-<section class="section soft">
-  <div class="container">
-    <h2>Questions about {s["faq_label"]}</h2>
-    <div style="margin-top:1.2rem">{faq_html(s["faqs"])}</div>
-    <p style="margin-top:1rem">Related: {related}</p>
-  </div>
-</section>
-{cta_band()}
 </main>
 '''
     return wrap(s["slug"], s["title"], s["description"], s["image"], schema, body)
