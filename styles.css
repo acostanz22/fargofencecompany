@@ -778,6 +778,17 @@ p { margin: 0; }
 .review-grid { display: grid; gap: 1rem; }
 .review { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1.1rem; }
 
+.reviews-empty {
+  max-width: 46rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--barn);
+  border-radius: 12px;
+  padding: 1.2rem 1.3rem;
+}
+.reviews-empty p { color: var(--ink-soft); }
+.reviews-empty p + p { margin-top: 0.7rem; }
+
 @media (min-width: 980px) {
   .page-hero .hero-grid { grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr); padding: 0; }
   .hero-grid { padding: 3rem 0; }

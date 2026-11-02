@@ -24,7 +24,8 @@ IMG_SIZES = {
 }
 
 # Genuine customer reviews only. Leave empty until real, attributable reviews are supplied;
-# the reviews section is omitted entirely while this list is empty. Each entry: (quote, name, source).
+# the homepage still shows an honest empty reviews section while this list is empty.
+# Each entry: (quote, name, source).
 REVIEWS = []
 
 
@@ -300,7 +301,7 @@ def footer(current):
   <div class="container footer-grid">
     <div>
       <h2>Company</h2>
-      <img src="logo.svg" alt="" width="280" height="56">
+      <img src="logo.svg" alt="Fargo Fence Company" width="280" height="56">
       <p style="margin-top:0.9rem">Fence installation and repair for homes, farms, and commercial lots in Fargo, ND and nearby Cass County and Clay County.</p>
       <a class="footer-phone" href="tel:{TEL}">{PHONE}</a>
       <ul style="margin-top:0.8rem">
@@ -450,16 +451,21 @@ def service_card(slug, image, alt, title, text, more="View service"):
 
 
 def reviews_block():
-    """Only renders when genuine reviews exist in REVIEWS; otherwise the section is omitted."""
-    if not REVIEWS:
-        return ""
-    cards = "".join(
-        f'<figure class="review"><blockquote>{q}</blockquote><figcaption>{n}, {src}</figcaption></figure>'
-        for q, n, src in REVIEWS
-    )
+    """Customer Reviews section; honest empty state when REVIEWS is empty."""
+    if REVIEWS:
+        inner = "".join(
+            f'<figure class="review"><blockquote>{q}</blockquote><figcaption>{n}, {src}</figcaption></figure>'
+            for q, n, src in REVIEWS
+        )
+        body = f'<div class="review-grid">{inner}</div>'
+    else:
+        body = f'''<div class="reviews-empty">
+      <p>We have not posted customer reviews on this site yet, and we will not invent any. When verified reviews from real customers are available, they will appear here with the reviewer&rsquo;s own words.</p>
+      <p>Want to talk to us first? Call <a href="tel:{TEL}">{PHONE}</a> or send the quote form and ask any question about your fence.</p>
+    </div>'''
     return f'''<div class="container">
-    <div class="section-head"><p class="kicker">Reviews</p><h2>What customers say</h2></div>
-    <div class="review-grid">{cards}</div>
+    <div class="section-head"><p class="kicker">Reviews</p><h2>Customer Reviews</h2></div>
+    {body}
   </div>'''
 
 
@@ -686,7 +692,7 @@ def home_page():
     services = f'''<div class="container">
     <div class="section-head">
       <p class="kicker">Materials and work</p>
-      <h2>Fence services in Fargo</h2>
+      <h2>Our Fence Services</h2>
       <p>Start with the job. A front-yard picket, a backyard screen, a dog run, and a pasture line are not the same fence.</p>
     </div>
     <div class="card-grid services">{cards}</div>
@@ -706,21 +712,32 @@ def home_page():
     gallery_block = f'''<div class="container">
     <div class="section-head">
       <p class="kicker">Gallery</p>
-      <h2>Fences we install</h2>
+      <h2>Our Gallery</h2>
       <p>Privacy, vinyl, chain link, aluminum, and rail from the crew that walks the line in Fargo and Cass County.</p>
     </div>
     <div class="gallery">{figs}</div>
     <p class="block-gap"><a class="more-link" href="services.html">See all fence services</a></p>
   </div>'''
+    process_steps = [
+        ("Request a quote.", "Send the quote form or call with the town, the fence type, and roughly how much line you need."),
+        (
+            "Discuss the project.",
+            "We talk through the job and walk the property to check the ground, gates, access, and the city or HOA rule that applies.",
+        ),
+        (
+            "Receive your estimate.",
+            "You get a free estimate for that measured line, including what could change the number before work starts.",
+        ),
+        (
+            "Schedule installation.",
+            "Once you approve, we set a start date, build the fence, and walk the finished line with you.",
+        ),
+    ]
     process = f'''<div class="container split-2">
     <div>
-      <h2>How a fence job is quoted</h2>
-      <ol class="steps">
-        <li><span class="num">1</span><span><strong>Name the job.</strong> Screen a yard, contain animals, mark a frontage, or secure a lot. That choice picks the material faster than a photo.</span></li>
-        <li><span class="num">2</span><span><strong>Walk the ground.</strong> This valley is flat, but the clay holds water and frost heave is the usual failure. Ditches, corners, and a long carry from the truck change the labor.</span></li>
-        <li><span class="num">3</span><span><strong>Count the openings.</strong> A fence with the wrong gate is a daily problem. Walk gates and drive gates are priced as their own pieces.</span></li>
-        <li><span class="num">4</span><span><strong>Repair or replace.</strong> Sound posts can take new panels. Posts that heaved over the winter cannot. We say which one you have.</span></li>
-      </ol>
+      <p class="kicker">How it works</p>
+      <h2>Our Process</h2>
+      {steps_html(process_steps)}
     </div>
     <div class="panel">
       <h2>Repairs and gates</h2>
@@ -730,21 +747,20 @@ def home_page():
     </div>
   </div>'''
     areas = f'''<div class="container">
-    <h2>Service area</h2>
+    <h2>Areas We Serve</h2>
     <p class="area-note">We work in Fargo and nearby communities, roughly a 25-mile drive, including the Minnesota side of the river. Each city writes its own fence rules. The clay does not change at the city limit.</p>
     <ul class="chips light-chips">{chips}</ul>
     <p class="towns-links"><a href="service-areas.html">All service areas</a></p>
   </div>'''
     faqs = f'''<div class="container">
-    <h2>Questions before you call</h2>
+    <div class="section-head">
+      <p class="kicker">FAQ</p>
+      <h2>Frequently Asked Questions</h2>
+    </div>
     <div class="block-gap">{faq_html(HOME_FAQS)}</div>
     <p class="block-gap"><a class="more-link" href="faq.html">More fence questions</a></p>
   </div>'''
-    blocks = [why, services, gallery_block]
-    reviews = reviews_block()
-    if reviews:
-        blocks.append(reviews)
-    blocks += [process, areas, faqs]
+    blocks = [why, services, gallery_block, reviews_block(), process, areas, faqs]
     body = f'''<main id="main">
 <section class="hero">
   <div class="hero-media">{img("images/hero-bg.jpg", "White vinyl privacy fence along a landscaped backyard", loading=None, extra=' fetchpriority="high"')}</div>
@@ -760,7 +776,7 @@ def home_page():
   </div>
 </section>
 {sections(blocks)}
-{cta_band("Ready to walk the line?")}
+{cta_band("Request a Free Quote")}
 </main>
 '''
     return wrap("index.html", HOME_TITLE, desc, "images/vinyl-privacy.jpg", schema, body)
