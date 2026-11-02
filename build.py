@@ -1,9 +1,41 @@
 # -*- coding: utf-8 -*-
 """Generate the Fargo Fence Company static site."""
+import html as htmllib
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+
+# Real pixel sizes of every file in images/ so <img> width/height match the file.
+IMG_SIZES = {
+    "images/aluminum.jpg": (800, 533),
+    "images/design-50.png": (800, 533),
+    "images/design-51.png": (800, 533),
+    "images/design-52.png": (800, 533),
+    "images/design-55.png": (800, 533),
+    "images/design-56.png": (800, 533),
+    "images/design-57.png": (800, 533),
+    "images/design-58.png": (800, 533),
+    "images/hero-bg.jpg": (1792, 1024),
+    "images/vinyl-gate.jpg": (628, 420),
+    "images/vinyl-privacy.jpg": (800, 533),
+    "images/vinyl-semi.jpg": (800, 533),
+}
+
+# Genuine customer reviews only. Leave empty until real, attributable reviews are supplied;
+# the reviews section is omitted entirely while this list is empty. Each entry: (quote, name, source).
+REVIEWS = []
+
+
+def img(src, alt, loading="lazy", extra=""):
+    w, h = IMG_SIZES[src]
+    load = f' loading="{loading}" decoding="async"' if loading else ""
+    return f'<img src="{src}" alt="{alt}" width="{w}" height="{h}"{load}{extra}>'
+
+
+def esc(text):
+    return htmllib.escape(text, quote=True)
 SITE = "https://www.fargofencecompany.net"
 NAME = "Fargo Fence Company"
 PHONE = "(701) 394-8468"
@@ -44,7 +76,7 @@ def phone_link(extra_class=""):
 
 
 def quote_href(current):
-    return "#quote" if current == "index.html" else "contact.html#quote"
+    return "#quote"
 
 
 def crumbs(items):
@@ -177,6 +209,8 @@ def faq_node(page_id, items):
 
 def head(path, title, description, image, schema, robots="index, follow"):
     url = canonical(path)
+    title = esc(title)
+    description = esc(description)
     return f'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -322,8 +356,8 @@ def cta_band(heading="Get an estimate for this fence"):
       <p>Call {PHONE} or send the town, the fence type, and roughly how much line you need.</p>
     </div>
     <div class="cta-actions">
-      <a class="btn btn-primary btn-lg" href="contact.html#quote">Get a free quote</a>
-      {call_btn("btn btn-ink btn-lg")}
+      <a class="btn btn-light btn-lg" href="#quote">Get a free quote</a>
+      {call_btn("btn btn-outline-light btn-lg")}
     </div>
   </div>
 </section>'''
@@ -337,6 +371,98 @@ def tally_card():
     </div>'''
 
 
+INTROS = {}
+
+
+def intro_p(key):
+    return f'<p class="lede intro">{INTROS[key]}</p>'
+
+
+def hero_actions():
+    return f'<div class="hero-actions">{call_btn("btn btn-primary btn-lg")}<a class="btn btn-ghost btn-lg" href="#quote">Get a free quote</a></div>'
+
+
+def page_hero(key, crumb_items, h1, eyebrow=""):
+    """Slim interior header: breadcrumb, H1, 5-6 sentence intro, and the quote form."""
+    eb = f'<p class="eyebrow">{eyebrow}</p>' if eyebrow else ""
+    return f'''<section class="page-hero">
+  <div class="container hero-grid">
+    <div class="hero-copy">
+      {crumbs(crumb_items)}
+      {eb}
+      <h1>{h1}</h1>
+      {intro_p(key)}
+      {hero_actions()}
+    </div>
+    {tally_card()}
+  </div>
+</section>'''
+
+
+def sections(blocks):
+    """Wrap each block in a section with alternating backgrounds (plain, alt, plain, ...)."""
+    out = []
+    for i, inner in enumerate(blocks):
+        alt = " section-alt" if i % 2 else ""
+        out.append(f'<section class="section{alt}">\n{inner}\n</section>')
+    return "\n".join(out)
+
+
+def webpage_node(path, name, desc, about=None):
+    url = canonical(path)
+    node = {
+        "@type": "WebPage",
+        "@id": url + "#webpage",
+        "url": url,
+        "name": name,
+        "description": desc,
+        "isPartOf": {"@id": f"{SITE}/#website"},
+        "publisher": {"@id": f"{SITE}/#business"},
+        "inLanguage": "en-US",
+    }
+    if about:
+        node["about"] = {"@id": about}
+    return node
+
+
+def breadcrumb_node(path, trail):
+    url = canonical(path)
+    items = [{"@type": "ListItem", "position": 1, "name": "Home", "item": f"{SITE}/"}]
+    for i, (name, p) in enumerate(trail, 2):
+        items.append({"@type": "ListItem", "position": i, "name": name, "item": canonical(p)})
+    return {"@type": "BreadcrumbList", "@id": url + "#breadcrumb", "itemListElement": items}
+
+
+def towns_block(title="Towns we serve"):
+    towns = "".join(f'<li><a href="{loc["slug"]}">{loc["nav"]}</a></li>' for loc in LOCATIONS)
+    return f'''<div class="container">
+    <h2>{title}</h2>
+    <ul class="chips light-chips">{towns}</ul>
+    <p class="towns-links"><a href="service-areas.html">Service areas</a> · <a href="services.html">All services</a> · <a href="#quote">Request an estimate</a></p>
+  </div>'''
+
+
+def service_card(slug, image, alt, title, text, more="View service"):
+    return f'''<a class="service-card" href="{slug}">
+        <span class="media">{img(image, alt)}</span>
+        <span class="body"><h3>{title}</h3><p>{text}</p><span class="more">{more}</span></span>
+      </a>'''
+
+
+def reviews_block():
+    """Only renders when genuine reviews exist in REVIEWS; otherwise the section is omitted."""
+    if not REVIEWS:
+        return ""
+    cards = "".join(
+        f'<figure class="review"><blockquote>{q}</blockquote><figcaption>{n}, {src}</figcaption></figure>'
+        for q, n, src in REVIEWS
+    )
+    return f'''<div class="container">
+    <div class="section-head"><p class="kicker">Reviews</p><h2>What customers say</h2></div>
+    <div class="review-grid">{cards}</div>
+  </div>'''
+
+
 def service_gallery(s):
     """Primary service image plus one other service image."""
     order = [slug for slug, _ in s["related"]] + [o["slug"] for o in SERVICES]
@@ -347,10 +473,7 @@ def service_gallery(s):
         if o and o["slug"] != s["slug"] and o["image"] != s["image"]:
             shots.append(o)
             break
-    figs = "".join(
-        f'<figure class="service-shot"><img src="{o["image"]}" alt="{o["alt"]}" width="960" height="640" loading="lazy" decoding="async"></figure>'
-        for o in shots
-    )
+    figs = "".join(f'<figure class="service-shot">{img(o["image"], o["alt"])}</figure>' for o in shots)
     return f'<div class="service-gallery">{figs}</div>'
 
 
@@ -368,17 +491,7 @@ def service_related(s):
 
 def service_page(s):
     schema = graph(
-        {
-            "@type": "WebPage",
-            "@id": f"{SITE}/{s['slug']}#webpage",
-            "url": f"{SITE}/{s['slug']}",
-            "name": s["h1"],
-            "description": s["description"],
-            "isPartOf": {"@id": f"{SITE}/#website"},
-            "about": {"@id": f"{SITE}/{s['slug']}#service"},
-            "publisher": {"@id": f"{SITE}/#business"},
-            "inLanguage": "en-US",
-        },
+        webpage_node(s["slug"], s["h1"], s["description"], about=f"{SITE}/{s['slug']}#service"),
         {
             "@type": "Service",
             "@id": f"{SITE}/{s['slug']}#service",
@@ -389,35 +502,10 @@ def service_page(s):
             "provider": {"@id": f"{SITE}/#business"},
             "areaServed": {"@type": "AdministrativeArea", "name": "Cass County, ND"},
         },
-        {
-            "@type": "BreadcrumbList",
-            "@id": f"{SITE}/{s['slug']}#breadcrumb",
-            "itemListElement": [
-                {"@type": "ListItem", "position": 1, "name": "Home", "item": f"{SITE}/"},
-                {"@type": "ListItem", "position": 2, "name": "Services", "item": f"{SITE}/services.html"},
-                {"@type": "ListItem", "position": 3, "name": s["nav"], "item": f"{SITE}/{s['slug']}"},
-            ],
-        },
+        breadcrumb_node(s["slug"], [("Services", "services.html"), (s["nav"], s["slug"])]),
         faq_node(f"{SITE}/{s['slug']}#faq", s["faqs"]),
     )
-    towns = "".join(f'<li><a href="{loc["slug"]}">{loc["nav"]}</a></li>' for loc in LOCATIONS)
-    body = f'''<main id="main">
-<div class="crumb-bar"><div class="container">{crumbs([("services.html", "Services"), (s["slug"], s["nav"])])}</div></div>
-<section class="page-hero service-hero">
-  <div class="container">
-    <div class="service-hero-inner">
-      <p class="eyebrow">{s["nav"]}</p>
-      <h1>{s["h1"]}</h1>
-      <p class="lede">{s["lede"]}</p>
-      <div class="hero-actions">
-        {call_btn("btn btn-primary btn-lg")}
-        <a class="btn btn-ghost btn-lg" href="contact.html#quote">Get a free quote</a>
-      </div>
-    </div>
-  </div>
-</section>
-<section class="section service-body">
-  <div class="container service-layout">
+    detail = f'''<div class="container service-layout">
     <div class="service-main">
       {service_gallery(s)}
       <div class="prose service-copy">
@@ -426,11 +514,6 @@ def service_page(s):
         <h2>How the work goes</h2>
         {steps_html(s["steps"])}
         <p>{s["after"]}</p>
-        <h2>What changes the estimate</h2>
-        <p>We price the line on the lot. These are the pieces that move the number. We do not publish a per-foot menu.</p>
-        {factors_html(s["factors"])}
-        <h2>Questions about {s["faq_label"]}</h2>
-        {faq_html(s["faqs"])}
       </div>
     </div>
     <aside class="service-aside" aria-label="Estimate and related services">
@@ -439,22 +522,29 @@ def service_page(s):
         <p>Call or send the town, the fence type, and a rough length. We will tell you if the job is a repair, a replacement, or a different material than you started with.</p>
         <p class="side-phone">{phone_link("phone-link-lg")}</p>
         <p class="side-hours">{OFFICE_HOURS}</p>
-        <p><a class="btn btn-primary" href="contact.html#quote">Get a free quote</a></p>
+        <p><a class="btn btn-primary" href="#quote">Get a free quote</a></p>
       </div>
       <div class="side-card side-card-muted">
         <p class="side-kicker">Related</p>
         <ul class="side-links">{service_related(s)}</ul>
       </div>
     </aside>
-  </div>
-</section>
-<section class="section section-towns">
-  <div class="container">
-    <h2>Towns we serve</h2>
-    <ul class="chips light-chips">{towns}</ul>
-    <p class="towns-links"><a href="service-areas.html">Service areas</a> · <a href="contact.html#quote">Request an estimate</a> · <a href="services.html">All services</a></p>
-  </div>
-</section>
+  </div>'''
+    factors = f'''<div class="container">
+    <div class="section-head">
+      <h2>What changes the estimate</h2>
+      <p>We price the line on the lot. These are the pieces that move the number. We do not publish a per-foot menu.</p>
+    </div>
+    {factors_html(s["factors"])}
+  </div>'''
+    faqs = f'''<div class="container">
+    <h2>Questions about {s["faq_label"]}</h2>
+    <div class="block-gap">{faq_html(s["faqs"])}</div>
+  </div>'''
+    body = f'''<main id="main">
+{page_hero(s["slug"], [("services.html", "Services"), (s["slug"], s["nav"])], s["h1"], eyebrow=s["nav"])}
+{sections([detail, factors, faqs, towns_block()])}
+{cta_band("Get an estimate for this fence")}
 </main>
 '''
     return wrap(s["slug"], s["title"], s["description"], s["image"], schema, body)
@@ -464,70 +554,37 @@ def location_page(loc):
     related = " · ".join(f'<a href="{slug}">{label}</a>' for slug, label in loc["related"])
     services = " · ".join(f'<a href="{slug}">{label}</a>' for slug, label in loc["services"])
     schema = graph(
-        {
-            "@type": "WebPage",
-            "@id": f"{SITE}/{loc['slug']}#webpage",
-            "url": f"{SITE}/{loc['slug']}",
-            "name": loc["h1"],
-            "description": loc["description"],
-            "isPartOf": {"@id": f"{SITE}/#website"},
-            "about": {"@id": f"{SITE}/{loc['slug']}#place"},
-            "publisher": {"@id": f"{SITE}/#business"},
-            "inLanguage": "en-US",
-        },
+        webpage_node(loc["slug"], loc["h1"], loc["description"], about=f"{SITE}/{loc['slug']}#place"),
         {
             "@type": "City",
             "@id": f"{SITE}/{loc['slug']}#place",
             "name": loc["place"],
             "containedInPlace": {"@type": "State", "name": loc["state"]},
         },
-        {
-            "@type": "BreadcrumbList",
-            "@id": f"{SITE}/{loc['slug']}#breadcrumb",
-            "itemListElement": [
-                {"@type": "ListItem", "position": 1, "name": "Home", "item": f"{SITE}/"},
-                {"@type": "ListItem", "position": 2, "name": "Service areas", "item": f"{SITE}/service-areas.html"},
-                {"@type": "ListItem", "position": 3, "name": loc["nav"], "item": f"{SITE}/{loc['slug']}"},
-            ],
-        },
+        breadcrumb_node(loc["slug"], [("Service areas", "service-areas.html"), (loc["nav"], loc["slug"])]),
         faq_node(f"{SITE}/{loc['slug']}#faq", loc["faqs"]),
     )
     paras = "".join(f"<p>{p}</p>" for p in loc["paras"])
-    body = f'''<main id="main">
-<section class="page-hero">
-  <div class="container">
-    {crumbs([("service-areas.html", "Service areas"), (loc["slug"], loc["nav"])])}
-    <h1>{loc["h1"]}</h1>
-    <p class="lede">{loc["lede"]}</p>
-    <div class="hero-actions">
-      {call_btn("btn btn-primary btn-lg")}
-      <a class="btn btn-ghost btn-lg" href="contact.html#quote">Get a free quote</a>
-    </div>
-  </div>
-</section>
-<section class="section">
-  <div class="container split">
-    <div class="split-media"><img src="{loc["image"]}" alt="{loc["alt"]}" width="960" height="640"></div>
+    when = f'''<div class="container split">
+    <div class="split-media">{img(loc["image"], loc["alt"])}</div>
     <div class="prose">
       <h2>What changes the fence here</h2>
       <p>{loc["when"]}</p>
     </div>
-  </div>
-</section>
-<section class="section soft">
-  <div class="container prose">
+  </div>'''
+    rules = f'''<div class="container prose narrow-prose">
     <h2>Ground, rules, and the line</h2>
     {paras}
-    <p style="margin-top:1rem">Fences that fit this work: {services}</p>
-  </div>
-</section>
-<section class="section">
-  <div class="container">
+    <p class="block-gap">Fences that fit this work: {services}</p>
+  </div>'''
+    faqs = f'''<div class="container">
     <h2>Questions about fencing in {loc["nav"]}</h2>
-    <div style="margin-top:1.2rem">{faq_html(loc["faqs"])}</div>
-    <p style="margin-top:1rem">Nearby: {related}</p>
-  </div>
-</section>
+    <div class="block-gap">{faq_html(loc["faqs"])}</div>
+    <p class="block-gap">Nearby: {related}</p>
+  </div>'''
+    body = f'''<main id="main">
+{page_hero(loc["slug"], [("service-areas.html", "Service areas"), (loc["slug"], loc["nav"])], loc["h1"], eyebrow=loc["place"])}
+{sections([when, rules, faqs])}
 {cta_band("Request an estimate in " + loc["nav"])}
 </main>
 '''
@@ -535,10 +592,11 @@ def location_page(loc):
 
 
 def load_content():
-    global SERVICES, LOCATIONS
-    from content import SERVICES as S, LOCATIONS as L
+    global SERVICES, LOCATIONS, INTROS
+    from content import SERVICES as S, LOCATIONS as L, INTROS as I
     SERVICES = S
     LOCATIONS = L
+    INTROS = I
 
 
 HOME_FAQS = [
@@ -588,98 +646,73 @@ FAQ_PAGE = HOME_FAQS + [
 ]
 
 
+HOME_TITLE = "Fence Company Fargo ND | Vinyl Fence, Wood Fence, Aluminum Fence & More"
+HOME_H1 = "Fence Company Fargo ND"
+
+
 def home_page():
-    cards = []
-    for s in SERVICES:
-        cards.append(
-            f'''<a class="service-card" href="{s["slug"]}">
-        <span class="media"><img src="{s["image"]}" alt="{s["alt"]}" width="960" height="640" loading="lazy"></span>
-        <span class="body"><h3>{s["nav"]}</h3><p>{s["card"]}</p><span class="more">View service</span></span>
-      </a>'''
-        )
+    cards = "".join(service_card(s["slug"], s["image"], s["alt"], s["nav"], s["card"]) for s in SERVICES)
     chips = "".join(f'<li><a href="{loc["slug"]}">{loc["nav"]}</a></li>' for loc in LOCATIONS)
     gallery = [
-        ("images/design-50.png", "Horizontal wood privacy fence"),
-        ("images/vinyl-privacy.jpg", "White vinyl privacy fence and gate"),
-        ("images/vinyl-semi.jpg", "White vinyl picket fence meeting a privacy panel"),
-        ("images/design-55.png", "Black chain-link fence with privacy slats"),
-        ("images/aluminum.jpg", "Black aluminum fence with a walk gate"),
-        ("images/design-52.png", "Wood rail fence with crossbuck bracing"),
+        ("images/design-50.png", "Horizontal wood privacy fence beside a patio"),
+        ("images/vinyl-privacy.jpg", "White vinyl privacy fence and gate along a lawn"),
+        ("images/vinyl-semi.jpg", "White vinyl picket fence meeting a privacy panel at a corner"),
+        ("images/design-55.png", "Black chain-link fence with privacy slats in part of the run"),
+        ("images/aluminum.jpg", "Black aluminum fence with a walk gate along a lawn"),
+        ("images/design-52.png", "Wood crossbuck rail fence along a lawn and trees"),
     ]
-    figs = "".join(f'<figure><img src="{src}" alt="{alt}" loading="lazy"></figure>' for src, alt in gallery)
+    figs = "".join(f"<figure>{img(src, alt)}</figure>" for src, alt in gallery)
+    desc = "Fargo Fence Company installs and repairs wood, vinyl, aluminum, chain-link, metal, and farm fencing in Fargo and nearby Cass County. Call (701) 394-8468."
     schema = graph(
-        {
-            "@type": "WebPage",
-            "@id": f"{SITE}/#webpage",
-            "url": f"{SITE}/",
-            "name": "Fence company in Fargo, ND",
-            "description": "Fargo Fence Company installs and repairs wood, vinyl, aluminum, chain-link, metal, and farm fencing in Fargo and nearby Cass County. Call (701) 394-8468.",
-            "isPartOf": {"@id": f"{SITE}/#website"},
-            "about": {"@id": f"{SITE}/#business"},
-            "publisher": {"@id": f"{SITE}/#business"},
-            "inLanguage": "en-US",
-        },
+        webpage_node("index.html", HOME_H1, desc, about=f"{SITE}/#business"),
         faq_node(f"{SITE}/#faq", HOME_FAQS),
     )
-    desc = "Fargo Fence Company installs and repairs wood, vinyl, aluminum, chain-link, metal, and farm fencing in Fargo and nearby Cass County. Call (701) 394-8468."
-    body = f'''<main id="main">
-<section class="hero">
-  <div class="hero-media"><img src="images/hero-bg.jpg" alt="White vinyl privacy fence along a landscaped backyard" width="1200" height="800" fetchpriority="high"></div>
-  <div class="hero-shade"></div>
-  <div class="container hero-grid">
-    <div>
-      <p class="eyebrow">Fargo, North Dakota</p>
-      <h1>Fence company in Fargo, ND</h1>
-      <p class="lede">Wood, vinyl, aluminum, chain-link, and farm fencing for houses, acreage, and commercial lots. New lines, replacements, repairs, and gates are quoted from the property.</p>
-      <div class="hero-actions">
-        {call_btn("btn btn-primary btn-lg")}
-        <a class="btn btn-ghost btn-lg" href="#quote">Request an estimate</a>
-      </div>
-      <ul class="hero-points">
-        <li>Homes, farms, and commercial lots</li>
-        <li>Posts set for lake-plain clay and frost</li>
-        <li>Free on-site estimates</li>
-      </ul>
+    why_items = [
+        ("Quoted from the property", "Every estimate comes from the lot, not from a catalog price. Length, height, gates, access, and the ground are all measured before a number is given."),
+        ("Posts set for clay and frost", "Fargo sits on lake-plain clay that holds water, and frost heave is the usual way a fence fails. Posts go in concrete deep enough for this ground, crowned so meltwater sheds off them."),
+        ("Every common fence material", "Wood, vinyl, aluminum, ornamental metal, chain link, and farm fencing, plus gates and repair, all from one call."),
+        ("City rules checked first", "Fargo, West Fargo, Horace, and Moorhead each write their own height and permit rules. We build to the city the lot is in, and to an association rule when it is stricter."),
+        ("Straight repair advice", "If the posts are sound, we fix the failed section. If they have heaved, we say so, even when that means a smaller job."),
+        ("Free on-site estimates", f"Office hours are 7 am to 7 pm, Monday through Sunday. Call {PHONE} or send the form and we schedule a visit to the property."),
+    ]
+    why = f'''<div class="container">
+    <div class="section-head">
+      <p class="kicker">Why choose us</p>
+      <h2>Why Choose Fargo Fence Company</h2>
+      <p>A fence in the Red River Valley has to survive frost, wet clay, and prairie wind. These are the things we do on every job.</p>
     </div>
-    {tally_card()}
-  </div>
-</section>
-<section class="section">
-  <div class="container">
+    {factors_html(why_items)}
+  </div>'''
+    services = f'''<div class="container">
     <div class="section-head">
       <p class="kicker">Materials and work</p>
       <h2>Fence services in Fargo</h2>
       <p>Start with the job. A front-yard picket, a backyard screen, a dog run, and a pasture line are not the same fence.</p>
     </div>
-    <div class="card-grid services">{"".join(cards)}</div>
-  </div>
-</section>
-<section class="band">
-  <div class="container section">
+    <div class="card-grid services">{cards}</div>
+    <div class="split-2 block-gap-lg">
+      <div class="panel">
+        <h3>Houses</h3>
+        <p>Backyard privacy, pet runs, and property-line replacements. In Fargo a solid front-yard fence stops at 3 feet, and an open fence may go to 4 feet. The taller wood or vinyl line belongs on the side and rear. West Fargo’s front-yard numbers are shorter. We use the city the lot is in.</p>
+        <a class="more" href="privacy-fence.html">Privacy fencing</a>
+      </div>
+      <div class="panel">
+        <h3>Lots and acreage</h3>
+        <p>A storage yard needs heavier chain link and a vehicle gate. A pasture toward Casselton or Harwood needs rail or wire sized for the animals, not a backyard panel. Tell us how the ground is used and we will spec the line for that use.</p>
+        <a class="more" href="farm-fence.html">Farm fencing</a>
+      </div>
+    </div>
+  </div>'''
+    gallery_block = f'''<div class="container">
     <div class="section-head">
-      <p class="kicker">Styles</p>
+      <p class="kicker">Gallery</p>
       <h2>Fences we install</h2>
       <p>Privacy, vinyl, chain link, aluminum, and rail from the crew that walks the line in Fargo and Cass County.</p>
     </div>
     <div class="gallery">{figs}</div>
-  </div>
-</section>
-<section class="section soft">
-  <div class="container split-2">
-    <div>
-      <h2>Houses</h2>
-      <p>Backyard privacy, pet runs, and property-line replacements. In Fargo a solid front-yard fence stops at 3 feet, and an open fence may go to 4 feet. The taller wood or vinyl line belongs on the side and rear. West Fargo’s front-yard numbers are shorter. We use the city the lot is in.</p>
-      <a class="more" href="privacy-fence.html">Privacy fencing</a>
-    </div>
-    <div>
-      <h2>Lots and acreage</h2>
-      <p>A storage yard needs heavier chain link and a vehicle gate. A pasture toward Casselton or Harwood needs rail or wire sized for the animals, not a backyard panel. Tell us how the ground is used and we will spec the line for that use.</p>
-      <a class="more" href="farm-fence.html">Farm fencing</a>
-    </div>
-  </div>
-</section>
-<section class="section">
-  <div class="container split-2">
+    <p class="block-gap"><a class="more-link" href="services.html">See all fence services</a></p>
+  </div>'''
+    process = f'''<div class="container split-2">
     <div>
       <h2>How a fence job is quoted</h2>
       <ol class="steps">
@@ -695,66 +728,59 @@ def home_page():
       <p>Gates are hung on posts sized for the opening. A walk gate and a drive gate are different builds, and an opener is not a patch for a post that moved.</p>
       <a class="more" href="fence-repair.html">Fence repair</a>
     </div>
-  </div>
-</section>
-<section class="band">
-  <div class="container section">
+  </div>'''
+    areas = f'''<div class="container">
     <h2>Service area</h2>
-    <p>We work in Fargo and nearby communities, roughly a 25-mile drive, including the Minnesota side of the river. Each city writes its own fence rules. The clay does not change at the city limit.</p>
-    <ul class="chips">{chips}</ul>
-    <p style="margin-top:1rem"><a href="service-areas.html" style="color:white">All service areas</a></p>
-  </div>
-</section>
-<section class="section">
-  <div class="container">
+    <p class="area-note">We work in Fargo and nearby communities, roughly a 25-mile drive, including the Minnesota side of the river. Each city writes its own fence rules. The clay does not change at the city limit.</p>
+    <ul class="chips light-chips">{chips}</ul>
+    <p class="towns-links"><a href="service-areas.html">All service areas</a></p>
+  </div>'''
+    faqs = f'''<div class="container">
     <h2>Questions before you call</h2>
-    <div style="margin-top:1.2rem">{faq_html(HOME_FAQS)}</div>
-    <p style="margin-top:1rem"><a href="faq.html">More fence questions</a></p>
+    <div class="block-gap">{faq_html(HOME_FAQS)}</div>
+    <p class="block-gap"><a class="more-link" href="faq.html">More fence questions</a></p>
+  </div>'''
+    blocks = [why, services, gallery_block]
+    reviews = reviews_block()
+    if reviews:
+        blocks.append(reviews)
+    blocks += [process, areas, faqs]
+    body = f'''<main id="main">
+<section class="hero">
+  <div class="hero-media">{img("images/hero-bg.jpg", "White vinyl privacy fence along a landscaped backyard", loading=None, extra=' fetchpriority="high"')}</div>
+  <div class="hero-shade"></div>
+  <div class="container hero-grid">
+    <div class="hero-copy">
+      <p class="eyebrow">Fargo, North Dakota</p>
+      <h1>{HOME_H1}</h1>
+      {intro_p("home")}
+      {hero_actions()}
+    </div>
+    {tally_card()}
   </div>
 </section>
+{sections(blocks)}
 {cta_band("Ready to walk the line?")}
 </main>
 '''
-    return wrap("index.html", "Fence Company in Fargo, ND | Fargo Fence Company", desc, "images/vinyl-privacy.jpg", schema, body)
+    return wrap("index.html", HOME_TITLE, desc, "images/vinyl-privacy.jpg", schema, body)
 
 
 def faq_page():
     desc = "Fence cost, permits, frost heave, and repairs in Fargo, West Fargo, and Moorhead. Straight answers from Fargo Fence Company."
     schema = graph(
-        {
-            "@type": "WebPage",
-            "@id": f"{SITE}/faq.html#webpage",
-            "url": f"{SITE}/faq.html",
-            "name": "Fence FAQ for Fargo, ND",
-            "description": desc,
-            "isPartOf": {"@id": f"{SITE}/#website"},
-            "publisher": {"@id": f"{SITE}/#business"},
-            "inLanguage": "en-US",
-        },
+        webpage_node("faq.html", "Fence FAQ for Fargo, ND", desc),
         faq_node(f"{SITE}/faq.html#faq", FAQ_PAGE),
-        {
-            "@type": "BreadcrumbList",
-            "@id": f"{SITE}/faq.html#breadcrumb",
-            "itemListElement": [
-                {"@type": "ListItem", "position": 1, "name": "Home", "item": f"{SITE}/"},
-                {"@type": "ListItem", "position": 2, "name": "FAQ", "item": f"{SITE}/faq.html"},
-            ],
-        },
+        breadcrumb_node("faq.html", [("FAQ", "faq.html")]),
     )
-    body = f'''<main id="main">
-<section class="page-hero">
-  <div class="container">
-    {crumbs([("faq.html", "FAQ")])}
-    <h1>Fence questions in Fargo</h1>
-    <p class="lede">Cost, permits, clay, and repairs. The short version is that the city writes the height, and the frost writes the post depth.</p>
-  </div>
-</section>
-<section class="section">
-  <div class="container">
+    faqs = f'''<div class="container">
     {faq_html(FAQ_PAGE)}
-    <p style="margin-top:1.2rem"><a href="contact.html#quote">Request an estimate</a> or call <a href="tel:{TEL}">{PHONE}</a>.</p>
-  </div>
-</section>
+    <p class="block-gap"><a href="#quote">Request an estimate</a> or call <a href="tel:{TEL}">{PHONE}</a>.</p>
+  </div>'''
+    body = f'''<main id="main">
+{page_hero("faq", [("faq.html", "FAQ")], "Fence questions in Fargo")}
+{sections([faqs, towns_block("Where we answer these questions")])}
+{cta_band("Still have a fence question?")}
 </main>
 '''
     return wrap("faq.html", "Fence FAQ for Fargo, ND | Fargo Fence Company", desc, "images/vinyl-privacy.jpg", schema, body)
@@ -763,40 +789,10 @@ def faq_page():
 def about_page():
     desc = "Fargo Fence Company installs and repairs fences for homes, farms, and commercial lots around Fargo, ND. Estimates are made on the property."
     schema = graph(
-        {
-            "@type": "WebPage",
-            "@id": f"{SITE}/about.html#webpage",
-            "url": f"{SITE}/about.html",
-            "name": "About Fargo Fence Company",
-            "description": desc,
-            "isPartOf": {"@id": f"{SITE}/#website"},
-            "about": {"@id": f"{SITE}/#business"},
-            "publisher": {"@id": f"{SITE}/#business"},
-            "inLanguage": "en-US",
-        },
-        {
-            "@type": "BreadcrumbList",
-            "@id": f"{SITE}/about.html#breadcrumb",
-            "itemListElement": [
-                {"@type": "ListItem", "position": 1, "name": "Home", "item": f"{SITE}/"},
-                {"@type": "ListItem", "position": 2, "name": "About", "item": f"{SITE}/about.html"},
-            ],
-        },
+        webpage_node("about.html", "About Fargo Fence Company", desc, about=f"{SITE}/#business"),
+        breadcrumb_node("about.html", [("About", "about.html")]),
     )
-    body = f'''<main id="main">
-<section class="page-hero">
-  <div class="container">
-    {crumbs([("about.html", "About")])}
-    <h1>About Fargo Fence Company</h1>
-    <p class="lede">We install and repair fences for houses, farms, and commercial lots in Fargo and nearby towns. The quote comes from the lot, not from a catalog price.</p>
-    <div class="hero-actions">
-      {call_btn("btn btn-primary btn-lg")}
-      <a class="btn btn-ghost btn-lg" href="contact.html#quote">Get a free quote</a>
-    </div>
-  </div>
-</section>
-<section class="section">
-  <div class="container prose narrow">
+    prose = f'''<div class="container prose narrow-prose">
     <h2>What we do</h2>
     <p>The work is wood, vinyl, aluminum, ornamental metal, chain link, farm fencing, gates, and repair. A front-yard picket and a pasture line are different products. We ask what the fence has to do before we name a material.</p>
     <p>This is a service-area business. There is no public storefront and no published street address. Estimates are scheduled at the property. Call {PHONE} or use the form.</p>
@@ -804,8 +800,10 @@ def about_page():
     <p>Tell us the city, the fence type, and a rough length. We look at access, gates, the old fence if there is one, and the ground. Fargo clay holds water, and shallow posts heave. That digging is part of the price, which is why a per-foot number from another climate does not transfer.</p>
     <p>City rules do not transfer either. Fargo, West Fargo, Horace, and Moorhead each write their own height and permit lines. If an association has a fence sheet, bring it. We build to the stricter rule.</p>
     <p><a href="service-areas.html">See the service area</a> or <a href="services.html">browse the services</a>.</p>
-  </div>
-</section>
+  </div>'''
+    body = f'''<main id="main">
+{page_hero("about", [("about.html", "About")], "About Fargo Fence Company")}
+{sections([prose, towns_block("Where we work")])}
 {cta_band("Talk through the line")}
 </main>
 '''
@@ -815,49 +813,25 @@ def about_page():
 def contact_page():
     desc = "Request a fence estimate from Fargo Fence Company. Call (701) 394-8468. Service-area business, no public storefront."
     schema = graph(
-        {
-            "@type": "WebPage",
-            "@id": f"{SITE}/contact.html#webpage",
-            "url": f"{SITE}/contact.html",
-            "name": "Contact Fargo Fence Company",
-            "description": desc,
-            "isPartOf": {"@id": f"{SITE}/#website"},
-            "publisher": {"@id": f"{SITE}/#business"},
-            "inLanguage": "en-US",
-        },
-        {
-            "@type": "BreadcrumbList",
-            "@id": f"{SITE}/contact.html#breadcrumb",
-            "itemListElement": [
-                {"@type": "ListItem", "position": 1, "name": "Home", "item": f"{SITE}/"},
-                {"@type": "ListItem", "position": 2, "name": "Contact", "item": f"{SITE}/contact.html"},
-            ],
-        },
+        webpage_node("contact.html", "Contact Fargo Fence Company", desc),
+        breadcrumb_node("contact.html", [("Contact", "contact.html")]),
     )
-    body = f'''<main id="main">
-<section class="page-hero">
-  <div class="container">
-    {crumbs([("contact.html", "Contact")])}
-    <h1>Request a fence estimate</h1>
-    <p class="lede">Call {PHONE} or send the form. Include the city, the fence type, and roughly how much line you need.</p>
-    <div class="hero-actions">{call_btn("btn btn-primary btn-lg")}</div>
-  </div>
-</section>
-<section class="section">
-  <div class="container contact-layout">
+    info = f'''<div class="container contact-layout">
     <div class="prose">
       <h2>What helps us price it</h2>
       <p>The town matters because Fargo, West Fargo, Horace, and Moorhead do not share a height chart. A photo of the old fence helps on a repair. An association rule helps on a newer plat.</p>
       <p>We are a service-area business. There is no showroom. The map is the area we drive, not a storefront pin.</p>
-      <p><a class="footer-phone" href="tel:{TEL}" style="color:inherit">{PHONE}</a></p>
-      <div class="map-frame">
-        <iframe title="Map of the Fargo area we serve" src="https://www.openstreetmap.org/export/embed.html?bbox=-97.25%2C46.72%2C-96.55%2C47.02&amp;layer=mapnik" loading="lazy"></iframe>
-        <p class="map-caption">About a 25-mile drive around Fargo, including West Fargo, Horace, Moorhead, and nearby Cass County. No public storefront.</p>
-      </div>
+      <p><a class="footer-phone-dark" href="tel:{TEL}">{PHONE}</a></p>
+      <div class="hours-card"><h3>Office hours</h3>{office_hours_block()}</div>
     </div>
-    {tally_card()}
-  </div>
-</section>
+    <div class="map-frame">
+      <iframe title="Map of the Fargo area we serve" src="https://www.openstreetmap.org/export/embed.html?bbox=-97.25%2C46.72%2C-96.55%2C47.02&amp;layer=mapnik" loading="lazy"></iframe>
+      <p class="map-caption">About a 25-mile drive around Fargo, including West Fargo, Horace, Moorhead, and nearby Cass County. No public storefront.</p>
+    </div>
+  </div>'''
+    body = f'''<main id="main">
+{page_hero("contact", [("contact.html", "Contact")], "Request a fence estimate")}
+{sections([info, towns_block("Towns we drive to")])}
 </main>
 '''
     return wrap("contact.html", "Contact Fargo Fence Company | Free Fence Estimate", desc, "images/vinyl-privacy.jpg", schema, body)
@@ -865,47 +839,18 @@ def contact_page():
 
 def services_page():
     desc = "Wood, vinyl, aluminum, metal, chain-link, picket, privacy, farm, commercial fencing, gates, and repair in Fargo, ND."
-    cards = []
-    for s in SERVICES:
-        cards.append(
-            f'''<a class="service-card" href="{s["slug"]}">
-        <span class="media"><img src="{s["image"]}" alt="{s["alt"]}" width="960" height="640" loading="lazy"></span>
-        <span class="body"><h3>{s["nav"]}</h3><p>{s["card"]}</p><span class="more">View service</span></span>
-      </a>'''
-        )
+    cards = "".join(service_card(s["slug"], s["image"], s["alt"], s["nav"], s["card"]) for s in SERVICES)
     schema = graph(
-        {
-            "@type": "WebPage",
-            "@id": f"{SITE}/services.html#webpage",
-            "url": f"{SITE}/services.html",
-            "name": "Fence services in Fargo, ND",
-            "description": desc,
-            "isPartOf": {"@id": f"{SITE}/#website"},
-            "publisher": {"@id": f"{SITE}/#business"},
-            "inLanguage": "en-US",
-        },
-        {
-            "@type": "BreadcrumbList",
-            "@id": f"{SITE}/services.html#breadcrumb",
-            "itemListElement": [
-                {"@type": "ListItem", "position": 1, "name": "Home", "item": f"{SITE}/"},
-                {"@type": "ListItem", "position": 2, "name": "Services", "item": f"{SITE}/services.html"},
-            ],
-        },
+        webpage_node("services.html", "Fence services in Fargo, ND", desc),
+        breadcrumb_node("services.html", [("Services", "services.html")]),
     )
+    grid = f'''<div class="container">
+    <div class="card-grid services">{cards}</div>
+  </div>'''
     body = f'''<main id="main">
-<section class="page-hero">
-  <div class="container">
-    {crumbs([("services.html", "Services")])}
-    <h1>Fence services in Fargo</h1>
-    <p class="lede">Each material is a different job. Pick the one that matches the yard, then call {PHONE} or ask for an estimate.</p>
-  </div>
-</section>
-<section class="section">
-  <div class="container">
-    <div class="card-grid services">{"".join(cards)}</div>
-  </div>
-</section>
+{page_hero("services", [("services.html", "Services")], "Fence services in Fargo")}
+{sections([grid, towns_block()])}
+{cta_band("Which fence fits your yard?")}
 </main>
 '''
     return wrap("services.html", "Fence Services in Fargo, ND | Fargo Fence Company", desc, "images/vinyl-privacy.jpg", schema, body)
@@ -913,49 +858,25 @@ def services_page():
 
 def areas_page():
     desc = "Fence installation around Fargo, West Fargo, Moorhead, Horace, Dilworth, Casselton, Mapleton, Harwood, and Cass County."
-    cards = []
-    for loc in LOCATIONS:
-        cards.append(
-            f'''<a class="service-card" href="{loc["slug"]}">
-        <span class="body"><h3>{loc["nav"]}</h3><p>{loc["lede"]}</p><span class="more">View area</span></span>
-      </a>'''
-        )
-    schema = graph(
-        {
-            "@type": "WebPage",
-            "@id": f"{SITE}/service-areas.html#webpage",
-            "url": f"{SITE}/service-areas.html",
-            "name": "Fence service areas around Fargo, ND",
-            "description": desc,
-            "isPartOf": {"@id": f"{SITE}/#website"},
-            "publisher": {"@id": f"{SITE}/#business"},
-            "inLanguage": "en-US",
-        },
-        {
-            "@type": "BreadcrumbList",
-            "@id": f"{SITE}/service-areas.html#breadcrumb",
-            "itemListElement": [
-                {"@type": "ListItem", "position": 1, "name": "Home", "item": f"{SITE}/"},
-                {"@type": "ListItem", "position": 2, "name": "Service areas", "item": f"{SITE}/service-areas.html"},
-            ],
-        },
+    cards = "".join(
+        service_card(loc["slug"], loc["image"], loc["alt"], loc["nav"], loc["lede"], more="View area")
+        for loc in LOCATIONS
     )
+    schema = graph(
+        webpage_node("service-areas.html", "Fence service areas around Fargo, ND", desc),
+        breadcrumb_node("service-areas.html", [("Service areas", "service-areas.html")]),
+    )
+    grid = f'''<div class="container">
+    <div class="card-grid services">{cards}</div>
+  </div>'''
+    note = f'''<div class="container prose narrow-prose">
+    <h2>Fargo and towns not listed</h2>
+    <p>Fargo itself is covered from the <a href="index.html">home page</a>. If your town is inside the drive and it is not listed, call {PHONE} and ask. We would rather say no than stretch a city rule onto the wrong parcel.</p>
+  </div>'''
     body = f'''<main id="main">
-<section class="page-hero">
-  <div class="container">
-    {crumbs([("service-areas.html", "Service areas")])}
-    <h1>Service areas around Fargo</h1>
-    <p class="lede">About a 25-mile drive from Fargo, on both sides of the Red River. The towns do not share one fence ordinance. The clay is the same.</p>
-  </div>
-</section>
-<section class="section">
-  <div class="container">
-    <div class="card-grid services">{"".join(cards)}</div>
-    <div class="prose" style="margin-top:1.6rem">
-      <p>Fargo itself is covered from the <a href="index.html">home page</a>. If your town is inside the drive and it is not listed, call {PHONE} and ask. We would rather say no than stretch a city rule onto the wrong parcel.</p>
-    </div>
-  </div>
-</section>
+{page_hero("areas", [("service-areas.html", "Service areas")], "Service areas around Fargo")}
+{sections([grid, note])}
+{cta_band("Request an estimate in your town")}
 </main>
 '''
     return wrap("service-areas.html", "Fence Service Areas around Fargo, ND", desc, "images/vinyl-privacy.jpg", schema, body)
@@ -963,30 +884,18 @@ def areas_page():
 
 def privacy_page():
     desc = "How Fargo Fence Company uses the estimate form. We use your details to reply to the request."
-    schema = graph({
-        "@type": "WebPage",
-        "@id": f"{SITE}/privacy.html#webpage",
-        "url": f"{SITE}/privacy.html",
-        "name": "Privacy policy",
-        "description": desc,
-        "isPartOf": {"@id": f"{SITE}/#website"},
-        "inLanguage": "en-US",
-    })
-    body = f'''<main id="main">
-<section class="page-hero">
-  <div class="container">
-    {crumbs([("privacy.html", "Privacy")])}
-    <h1>Privacy</h1>
-    <p class="lede">The estimate form asks for the details we need to call or email you back.</p>
-  </div>
-</section>
-<section class="section">
-  <div class="container prose narrow">
+    schema = graph(
+        webpage_node("privacy.html", "Privacy policy", desc),
+        breadcrumb_node("privacy.html", [("Privacy", "privacy.html")]),
+    )
+    prose = f'''<div class="container prose narrow-prose">
     <p>The quote form is embedded from Tally. Submissions include the information you type, plus a hidden source field set to “Fargo Fence Company” so we can see which site the request came from. We use that information to respond to the estimate. We do not sell it.</p>
     <p>Phone calls to {PHONE} are answered as normal business calls. This site does not run a customer account or a payment page. Do not send card numbers or other payment details through the form.</p>
     <p>To ask about a submission, call {PHONE}.</p>
-  </div>
-</section>
+  </div>'''
+    body = f'''<main id="main">
+{page_hero("privacy", [("privacy.html", "Privacy")], "Privacy")}
+{sections([prose])}
 </main>
 '''
     return wrap("privacy.html", "Privacy Policy | Fargo Fence Company", desc, "images/vinyl-privacy.jpg", schema, body)
@@ -994,25 +903,14 @@ def privacy_page():
 
 def not_found_page():
     desc = "That page is not on the Fargo Fence Company site."
-    schema = graph({
-        "@type": "WebPage",
-        "@id": f"{SITE}/404.html#webpage",
-        "url": f"{SITE}/404.html",
-        "name": "Page not found",
-        "description": desc,
-        "inLanguage": "en-US",
-    })
+    schema = graph(webpage_node("404.html", "Page not found", desc))
+    nxt = f'''<div class="container prose narrow-prose">
+    <h2>Where to go next</h2>
+    <p><a href="index.html">Home</a> · <a href="services.html">Fence services</a> · <a href="service-areas.html">Service areas</a> · <a href="faq.html">FAQ</a> · <a href="contact.html">Contact</a></p>
+  </div>'''
     body = f'''<main id="main">
-<section class="page-hero">
-  <div class="container">
-    <h1>Page not found</h1>
-    <p class="lede">That address is not on this site. Try the services list or call {PHONE}.</p>
-    <div class="hero-actions">
-      <a class="btn btn-primary btn-lg" href="index.html">Back to home</a>
-      <a class="btn btn-ghost btn-lg" href="services.html">View services</a>
-    </div>
-  </div>
-</section>
+{page_hero("notfound", [("404.html", "Page not found")], "Page not found")}
+{sections([nxt])}
 </main>
 '''
     return wrap("404.html", "Page not found | Fargo Fence Company", desc, "images/vinyl-privacy.jpg", schema, body, robots="noindex, follow")
@@ -1034,6 +932,34 @@ def write_robots():
         "User-agent: *\nAllow: /\n\nSitemap: https://www.fargofencecompany.net/sitemap.xml\n",
         encoding="utf-8",
     )
+
+
+def sentence_count(text):
+    return len([x for x in re.split(r"(?<=[.!?])\s+", text.strip()) if x])
+
+
+def audit_intros(pages):
+    """Every page intro must be 5-6 sentences and start with the business name."""
+    bad = []
+    for name, page in pages.items():
+        m = re.search(r'<p class="lede intro">(.*?)</p>', page, re.S)
+        if not m:
+            bad.append((name, "no intro"))
+            continue
+        text = re.sub(r"<[^>]+>", "", m.group(1))
+        n = sentence_count(text)
+        if not text.startswith(NAME) or not 5 <= n <= 6:
+            bad.append((name, n, text[:40]))
+        if name == "index.html":
+            h1 = re.search(r"<h1>(.*?)</h1>", page).group(1)
+            assert h1 == "Fence Company Fargo ND", h1
+            assert f"<title>{esc(HOME_TITLE)}</title>" in page
+    if bad:
+        print("INTRO PROBLEMS")
+        for b in bad:
+            print(b)
+        raise SystemExit(1)
+    print("Intros OK: 5-6 sentences, start with", NAME)
 
 
 def main():
@@ -1072,6 +998,7 @@ def main():
         for item in missing:
             print(item)
         raise SystemExit(1)
+    audit_intros(pages)
     lengths = [len(s["card"]) for s in SERVICES]
     print("Card lengths", min(lengths), max(lengths))
 
